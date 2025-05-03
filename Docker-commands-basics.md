@@ -65,7 +65,7 @@
 | Command | Description |
 |---------|-------------|
 | `docker events --filter 'event=die'` | Monitor container death events |
-| `docker logs --since 1h CONTAINER` | Show logs from last hour |
+| `docker logs [OPTIONS] CONTAINER` | Show container logs. Options:<br>`-f`/`--follow`: Follow log output<br>`--tail N`: Show last N lines<br>`-t`/`--timestamps`: Show timestamps<br>`--since TIMESTAMP`: Show logs since timestamp (e.g., "2023-01-02T13:23:37")<br>`--until TIMESTAMP`: Show logs before timestamp<br>`--details`: Show extra details<br>`-n`/`--tail all`: Show all logs (default) |
 | `docker stats --all --format "table {{.Container}}\t{{.CPUPerc}}\t{{.MemUsage}}"` | Custom stats output |
 
 ## Security
@@ -93,7 +93,7 @@
 | `docker swarm init --advertise-addr <IP>` | Initialize swarm |
 | `docker swarm join-token worker` | Show worker join token |
 | `docker service scale SERVICE=REPLICAS` | Scale service |
-| `docker service logs SERVICE` | Show service logs |
+| `docker service logs [OPTIONS] SERVICE` | Show service logs (supports same options as `docker logs`) |
 
 ## Useful Combinations
 
@@ -105,6 +105,9 @@
 | `docker exec -it CONTAINER /bin/bash` | Get interactive shell |
 | `docker inspect --format '{{.NetworkSettings.IPAddress}}' CONTAINER` | Get container IP |
 | `docker stats $(docker ps --format '{{.Names}}')` | Monitor all running containers |
+| `docker logs -f -t --tail 100 CONTAINER` | Follow logs with timestamps, showing last 100 lines |
+| `docker logs --since 30m CONTAINER` | Show logs from last 30 minutes |
+| `docker logs -f --until 2h CONTAINER` | Follow logs until logs from 2 hours ago |
 
 ## Docker Compose v2 (Modern)
 
@@ -116,6 +119,7 @@
 | `docker compose push` | Push service images |
 | `docker compose convert` | Convert compose file to platform format |
 | `docker compose version` | Show version information |
+| `docker compose logs [OPTIONS] [SERVICE]` | View service logs (supports same options as `docker logs`) |
 
 ## Registry Management
 
@@ -124,6 +128,15 @@
 | `docker search --limit 5 TERM` | Search with result limit |
 | `docker logout REGISTRY` | Logout from specific registry |
 | `docker image prune -a --filter "until=24h"` | Remove images older than 24h |
+
+## Advanced Logging Examples
+
+| Command | Description |
+|---------|-------------|
+| `docker logs --since $(date -d '1 hour ago' +%Y-%m-%dT%H:%M:%S) CONTAINER` | Show logs from last hour using date command |
+| `docker logs -f --since 10m CONTAINER \| grep -i error` | Follow logs from last 10 minutes and filter for errors |
+| `docker logs --tail 50 -t CONTAINER \| tee container.log` | Save last 50 logs with timestamps to file |
+| `docker compose logs -f --tail=0` | Follow all compose service logs from current time |
 
 ## Useful Aliases
 
@@ -135,3 +148,6 @@ alias dstop='docker stop $(docker ps -q)'
 alias drm='docker rm $(docker ps -aq)'
 alias drmi='docker rmi $(docker images -q)'
 alias dclean='docker system prune -a -f --volumes'
+alias dlogs='docker logs -f -t --tail 100'
+alias dlogserr='docker logs --since 1h | grep -i error'
+alias dcomlogs='docker compose logs -f --tail=100'
