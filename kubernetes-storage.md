@@ -226,13 +226,15 @@ spec:
 
 ### 4. Commands to Manage Storage
 
-| Command                             | What It Does                     | Example                               |
-|-------------------------------------|-----------------------------------|---------------------------------------|
-| `kubectl get pv`                    | List PersistentVolumes            | `kubectl get pv`                      |
-| `kubectl get pvc`                   | List PersistentVolumeClaims       | `kubectl get pvc`                     |
-| `kubectl get storageclass`          | List StorageClasses               | `kubectl get sc`                      |
-| `kubectl describe pvc my-claim`     | Check PVC status                  | `kubectl describe pvc mysql-pvc`      |
-| `kubectl delete pvc my-claim`       | Delete a PVC                      | `kubectl delete pvc mysql-pvc`        |
+| Command                               | What It Does                      | Example                                 |
+|---------------------------------------|-----------------------------------|-----------------------------------------|
+| `kubectl get pv`                      | List PersistentVolumes            | `kubectl get pv`                        |
+| `kubectl get pvc`                     | List PersistentVolumeClaims       | `kubectl get pvc -n my-namespace`       |
+| `kubectl get storageclass`            | List StorageClasses               | `kubectl get sc`                        |
+| `kubectl describe pv <pv-name>`       | Show PV details                   | `kubectl describe pv mysql-pv`          |
+| `kubectl describe pvc <pvc-name>`     | Show PVC details                  | `kubectl describe pvc mysql-pvc`        |
+| `kubectl delete pvc <pvc-name>`       | Delete a PVC                      | `kubectl delete pvc mysql-pvc`          |
+
 
 ### 5. When to Use What?
 
@@ -242,4 +244,218 @@ spec:
 | Single-Pod storage                 | `ReadWriteOnce` (PVC + PV)        | Database (MySQL)                  |
 | Multi-Pod shared storage           | `ReadWriteMany` (NFS)             | Shared file uploads               |
 | Cloud storage                      | `StorageClass` (AWS EBS/GCE PD)   | Auto-provisioned volumes          |
+
+### 2. Creating Storage Resources
+
+#### Create a PersistentVolume (PV)
+
+```sh
+kubectl apply -f pv.yaml
+```
+
+### Example pv.yaml (NFS volume):
+
+```yml
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: my-nfs-pv
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteMany
+  nfs:
+    server: 10.0.0.1
+    path: "/exports/data"
+```
+### Create a PersistentVolumeClaim (PVC)
+
+```
+kubectl apply -f pvc.yaml
+```
+
+### Example pvc.yaml:
+
+```yml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: my-pvc
+spec:
+  storageClassName: ""
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+```
+### Create a StorageClass
+```sh
+kubectl apply -f storageclass.yaml
+```
+### Example storageclass.yaml (AWS EBS):
+```yml
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: aws-gp3
+provisioner: ebs.csi.aws.com
+parameters:
+  type: gp3
+  fsType: ext4
+```
+
+### 3. Using Storage in Pods
+
+#### Mount a PVC in a Pod
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-pod
+spec:
+  containers:
+  - name: nginx
+    image: nginx
+    volumeMounts:
+    - name: my-storage
+      mountPath: "/usr/share/nginx/html"
+  volumes:
+  - name: my-storage
+    persistentVolumeClaim:
+      claimName: my-pvc
+```
+
+### Temporary Storage (emptyDir)
+
+`emptyDir` volumes are useful for scratch space or temporary data needed during a Pod's lifetime. The data is lost when the Pod is removed.
+
+#### Example:
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: temp-storage-pod
+spec:
+  containers:
+  - name: busybox
+    image: busybox
+    command: ["sleep", "3600"]
+    volumeMounts:
+    - name: temp-vol
+      mountPath: "/tmp/cache"
+  volumes:
+  - name: temp-vol
+    emptyDir: {}
+```
+→ This Pod uses /tmp/cache as temporary storage that is wiped when the Pod is deleted or restarted.
+
+### 4. Dynamic Provisioning
+
+Kubernetes can dynamically provision storage using a `StorageClass`, so you don’t have to manually create PersistentVolumes.
+
+#### Create a PVC for Dynamic Provisioning
+
+```yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: dynamic-pvc
+spec:
+  storageClassName: "aws-gp3"  # Must match a defined StorageClass
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+```
+→ This PVC will trigger Kubernetes to dynamically create a PersistentVolume using the aws-gp3 StorageClass.
+
+### Apply the configuration:
+
+```
+kubectl apply -f dynamic-pvc.yaml
+```
+
+### 5. Managing Storage
+
+| Command                                                                 | Description                 | Example                                                        |
+|-------------------------------------------------------------------------|-----------------------------|----------------------------------------------------------------|
+| `kubectl delete pvc <name>`                                            | Delete a PVC                | `kubectl delete pvc my-pvc`                                   |
+| `kubectl delete pv <name>`                                             | Delete a PV                 | `kubectl delete pv my-pv`                                     |
+| `kubectl patch pv <name> -p '{"spec":{"persistentVolumeReclaimPolicy":"Retain"}}'` | Change reclaim policy       | `kubectl patch pv pv-1 -p '{"spec":{"persistentVolumeReclaimPolicy":"Retain"}}'` |
+| `kubectl edit pvc <name>`                                              | Edit PVC configuration      | `kubectl edit pvc my-pvc`                                     |
+
+### 6. Debugging Storage Issues
+
+| Command                                                                 | Description                       | Example                                                                       |
+|--------------------------------------------------------------------------|-----------------------------------|-------------------------------------------------------------------------------|
+| `kubectl describe pvc <name>`                                           | Check why PVC isn't bound         | `kubectl describe pvc pending-pvc`                                           |
+| `kubectl get events --sort-by=.metadata.creationTimestamp`             | View cluster events               | `kubectl get events -A --field-selector involvedObject.name=my-pvc`          |
+| `kubectl exec -it <pod> -- df -h`                                      | Check mounted storage in Pod      | `kubectl exec -it nginx-pod -- df -h`                                        |
+| `kubectl exec -it <pod> -- ls /mnt/data`                               | List files in mounted volume      | `kubectl exec -it app-pod -- ls /data`                                       |
+
+
+### 7. Real-World Examples
+
+#### MySQL with Persistent Storage
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mysql
+spec:
+  selector:
+    matchLabels:
+      app: mysql
+  template:
+    metadata:
+      labels:
+        app: mysql
+    spec:
+      containers:
+      - name: mysql
+        image: mysql:5.7
+        env:
+        - name: MYSQL_ROOT_PASSWORD
+          value: "password"
+        volumeMounts:
+        - name: mysql-data
+          mountPath: /var/lib/mysql
+      volumes:
+      - name: mysql-data
+        persistentVolumeClaim:
+          claimName: mysql-pvc
+```
+
+### Shared Storage (ReadWriteMany with NFS)
+
+```yml
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: shared-pv
+spec:
+  capacity:
+    storage: 100Gi
+  accessModes:
+    - ReadWriteMany
+  nfs:
+    server: nfs-server.example.com
+    path: "/exports"
+```
+
+### 8. Advanced Commands
+
+| Command                                                                 | Description                        |
+|-------------------------------------------------------------------------|------------------------------------|
+| `kubectl patch storageclass <name> -p '{"allowVolumeExpansion": true}'` | Enable volume expansion            |
+| `kubectl edit storageclass standard`                                    | Modify StorageClass                |
+| `kubectl get csidrivers`                                                | List CSI drivers                   |
+| `kubectl describe csistoragecapacities`                                 | Check storage capacity             |
+
 
