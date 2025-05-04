@@ -278,3 +278,120 @@ Shows:
 ```sh
 kubectl delete ingress my-ingress
 ```
+## 4. Network Policies
+
+### Apply a NetworkPolicy
+```sh
+kubectl apply -f network-policy.yaml
+```
+
+### Example network-policy.yaml:
+
+```yml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-frontend-to-backend
+spec:
+  podSelector:
+    matchLabels:
+      app: backend
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: frontend
+    ports:
+    - protocol: TCP
+      port: 80
+```
+### List Network Policies
+```
+kubectl get networkpolicies
+```
+
+### Delete a NetworkPolicy
+```
+kubectl delete networkpolicy allow-frontend-to-backend
+```
+
+
+## 5. DNS & Service Discovery
+
+### Check DNS Resolution Inside a Pod
+```sh
+kubectl exec -it <pod-name> -- nslookup my-service
+```
+### Example:
+```sh
+kubectl exec -it frontend-pod -- nslookup backend-service
+```
+→ Returns the ClusterIP of backend-service.
+
+### Check CoreDNS Logs
+```sh
+kubectl logs -n kube-system <coredns-pod-name>
+```
+### Find CoreDNS Pod:
+```sh
+kubectl get pods -n kube-system | grep coredns
+```
+
+## 6. Debugging Networking Issues
+
+### Check Service Endpoints
+```sh
+kubectl get endpoints my-service
+```
+Shows which Pod IPs are behind a Service.
+
+### Test Connectivity Between Pods
+```sh
+kubectl exec -it <pod-name> -- curl http://<another-pod-ip>
+```
+
+### Example
+```sh
+kubectl exec -it frontend-pod -- curl http://10.244.1.3
+```
+
+### Port-Forward to Debug Locally
+```sh
+kubectl port-forward svc/my-service 8080:80
+```
+Now access localhost:8080 to test the Service.
+
+### Check kube-proxy Logs
+```sh
+kubectl logs -n kube-system <kube-proxy-pod-name>
+```
+
+## 7. Advanced Networking (CNI, eBPF, Service Mesh)
+
+### Check CNI Plugin (e.g., Calico, Cilium)
+```sh
+kubectl get pods -n kube-system | grep -E 'calico|cilium'
+```
+### Install Istio (Service Mesh)
+```sh
+istioctl install --set profile=demo -y
+kubectl label namespace default istio-injection=enabled
+```
+### Check Istio Ingress Gateway IP
+```sh
+kubectl get svc -n istio-system istio-ingressgateway
+```
+
+## Summary Table: Most Used Networking Commands
+
+| Command                                             | Purpose                        |
+|-----------------------------------------------------|--------------------------------|
+| `kubectl get pods -o wide`                          | List Pods with IPs             |
+| `kubectl expose deploy/my-app --port=80`            | Create a ClusterIP Service     |
+| `kubectl get svc`                                   | List all Services              |
+| `kubectl get ingress`                               | List Ingress rules             |
+| `kubectl apply -f network-policy.yaml`              | Apply a NetworkPolicy          |
+| `kubectl exec -it <pod> -- curl <url>`              | Test Pod connectivity          |
+| `kubectl port-forward svc/my-service 8080:80`       | Forward a Service locally      |
+
+
